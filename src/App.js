@@ -8,7 +8,7 @@ function App() {
   const [location, setLocation] = useState(null);
   const [category, setCategory] = useState("Medical Emergency");
 
-  // 1. Real-time Data Fetching (Latest request sabse upar)
+  // 1. Real-time Data Fetching
   useEffect(() => {
     const q = query(collection(db, "emergency_requests"), orderBy("time", "desc"));
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
@@ -21,7 +21,7 @@ function App() {
     return () => unsubscribe();
   }, []);
 
-  // 2. FETCH CURRENT LOCATION OF USER
+  // 2. FETCH CURRENT LOCATION (Ab yeh permission maangega)
   const getLocation = () => {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition((position) => {
@@ -32,20 +32,25 @@ function App() {
         setLocation(coords);
         alert("📍 Your current location has been locked!");
       }, () => {
-        alert("Please enable GPS/Location permissions!");
+        alert("Please enable GPS/Location permissions in your browser settings!");
       });
     }
   };
 
-  // 3. SOS Request SEND (With Latitude & Longitude)
+  // 3. SOS Request SEND (Ab bina location ke submit nahi hoga)
   const sendEmergency = async () => {
+    if (!location) {
+      alert("Please fetch your location first by clicking the button!");
+      return;
+    }
+
     try {
       await addDoc(collection(db, "emergency_requests"), {
         type: category,
         status: "Active",
         time: new Date().toLocaleString(),
-        latitude: location ? location.lat : 26.8467, 
-        longitude: location ? location.lng : 80.9462
+        latitude: location.lat, 
+        longitude: location.lng
       });
       alert('SOS Sent! Help is on the way.');
       setScreen('map'); 
@@ -99,7 +104,6 @@ function App() {
   }
 
   if (screen === 'map') {
-    // to show latest location on map
     const latestRequest = requests[0] || { latitude: 26.8467, longitude: 80.9462 };
 
     return (
@@ -107,7 +111,6 @@ function App() {
         <button onClick={() => setScreen('welcome')} className="text-cyan-400 mb-4 flex items-center">← Back</button>
         <h2 className="text-2xl font-bold mb-4">Nearby Alerts</h2>
 
-        {/* Live Map - it show coordinates of latest location */}
         <div className="w-full h-64 bg-slate-800 rounded-3xl mb-6 overflow-hidden border-2 border-slate-700 relative">
           <iframe
           title="Emergency Location Map" 
