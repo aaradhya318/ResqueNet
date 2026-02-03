@@ -1,142 +1,175 @@
 import React, { useState, useEffect } from 'react';
 import { db } from './firebase';
-import { collection, addDoc, onSnapshot, query, orderBy } from "firebase/firestore";
+import { collection, addDoc, onSnapshot, query, orderBy } from 'firebase/firestore';
 
 function App() {
-  const [screen, setScreen] = useState('welcome');
-  const [requests, setRequests] = useState([]);
   const [location, setLocation] = useState(null);
-  const [category, setCategory] = useState("Medical Emergency");
+  const [requests, setRequests] = useState([]);
+  const [screen, setScreen] = useState('home');
+  const [selectedType, setSelectedType] = useState('');
+  
+  // Volunteer Mock Position 
+  const volunteerLoc = { lat: 26.8500, lng: 80.9500 }; 
 
-  // 1. Real-time Data Fetching
   useEffect(() => {
     const q = query(collection(db, "emergency_requests"), orderBy("time", "desc"));
-    const unsubscribe = onSnapshot(q, (querySnapshot) => {
-      const docs = [];
-      querySnapshot.forEach((doc) => {
-        docs.push({ id: doc.id, ...doc.data() });
-      });
-      setRequests(docs);
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      setRequests(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
     });
     return () => unsubscribe();
   }, []);
 
-  // 2. FETCH CURRENT LOCATION (Ab yeh permission maangega)
-  const getLocation = () => {
+  const handleFetchLocation = () => {
     if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition((position) => {
-        const coords = {
-          lat: position.coords.latitude,
-          lng: position.coords.longitude
-        };
-        setLocation(coords);
-        alert("📍 Your current location has been locked!");
-      }, () => {
-        alert("Please enable GPS/Location permissions in your browser settings!");
-      });
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setLocation({ lat: position.coords.latitude, lng: position.coords.longitude });
+          alert("📍 GPS Location Locked!");
+        },
+        () => alert("⚠️ Please allow GPS access!"),
+        { enableHighAccuracy: true }
+      );
     }
   };
 
-  // 3. SOS Request SEND (Ab bina location ke submit nahi hoga)
-  const sendEmergency = async () => {
-    if (!location) {
-      alert("Please fetch your location first by clicking the button!");
-      return;
-    }
-
+  const submitSOS = async () => {
+    if (!location) return alert("Please fetch location first!");
     try {
       await addDoc(collection(db, "emergency_requests"), {
-        type: category,
+        type: selectedType,
         status: "Active",
         time: new Date().toLocaleString(),
-        latitude: location.lat, 
-        longitude: location.lng
+        latitude: location.lat,
+        longitude: location.lng,
       });
-      alert('SOS Sent! Help is on the way.');
-      setScreen('map'); 
-    } catch (e) {
-      console.error("Error: ", e);
-    }
+      setScreen('map');
+    } catch (e) { console.error(e); }
   };
 
-  // --- UI SCREENS ---
-
-  if (screen === 'welcome') {
-    return (
-      <div className="min-h-screen bg-slate-900 text-white flex flex-col items-center justify-center p-6 text-center">
-        <h1 className="text-5xl font-black text-cyan-400 mb-2">ResqueNet</h1>
-        <p className="text-gray-400 mb-12">Instant Community Emergency Response</p>
-        <div onClick={() => setScreen('form')} className="bg-red-600 w-48 h-48 rounded-full flex items-center justify-center border-8 border-red-900 shadow-[0_0_50px_rgba(220,38,38,0.5)] cursor-pointer active:scale-95 transition-all">
-          <span className="text-4xl font-black">SOS</span>
+  return (
+    <div className="min-h-screen bg-slate-900 text-white p-6 font-sans">
+      
+      {/* 1. HOME SCREEN */}
+      {screen === 'home' && (
+        <div className="flex flex-col items-center justify-center h-screen text-center">
+          <h1 className="text-5xl font-black mb-2 tracking-tighter text-cyan-500">RESQUENET</h1>
+          <p className="text-slate-400 mb-12 text-sm tracking-widest uppercase">Community Crisis Lifeline</p>
+          
+          <button 
+            onClick={() => setScreen('category')} 
+            className="bg-red-600 w-48 h-48 rounded-full text-3xl font-black shadow-[0_0_50px_rgba(220,38,38,0.5)] animate-pulse border-8 border-red-900/30"
+          >
+            SOS
+          </button>
+          
+          <button 
+            onClick={() => setScreen('dashboard')} 
+            className="mt-16 text-cyan-400 font-bold tracking-widest text-xs border-b border-cyan-400/30 pb-1"
+          >
+            VOLUNTEER DASHBOARD
+          </button>
         </div>
-        <button onClick={() => setScreen('map')} className="mt-12 text-cyan-400 font-bold uppercase tracking-widest text-sm">Volunteer Dashboard</button>
-      </div>
-    );
-  }
+      )}
 
-  if (screen === 'form') {
-    return (
-      <div className="min-h-screen bg-slate-900 text-white p-6">
-        <button onClick={() => setScreen('welcome')} className="text-cyan-400 mb-6">← Back</button>
-        <h2 className="text-3xl font-bold mb-8 text-red-500">Ask for Help</h2>
-        
-        <div className="space-y-6">
-          <div>
-            <label className="block text-sm text-slate-400 mb-2">Category</label>
-            <select value={category} onChange={(e) => setCategory(e.target.value)} className="w-full bg-slate-800 p-4 rounded-xl border border-slate-700">
-              <option>Medical Emergency</option>
-              <option>Fire Emergency</option>
-              <option>Rescue Needed</option>
-              <option>Food/Shelter</option>
-            </select>
+      {/* 2. CATEGORY & FETCH SCREEN */}
+      {screen === 'category' && (
+        <div className="max-w-md mx-auto pt-8">
+          <h2 className="text-2xl font-bold mb-8 text-center">Emergency Details</h2>
+          <div className="grid grid-cols-2 gap-3 mb-8">
+            {['Medical', 'Fire', 'Food/Shelter', 'Rescue'].map(type => (
+              <button 
+                key={type} 
+                onClick={() => setSelectedType(type)} 
+                className={`p-4 rounded-2xl border-2 transition-all ${selectedType === type ? 'bg-red-600 border-white scale-105' : 'bg-slate-800 border-slate-700 opacity-60'}`}
+              >
+                <div className="font-bold text-sm">{type}</div>
+              </button>
+            ))}
+          </div>
+          
+          <div className="space-y-4">
+            <button onClick={handleFetchLocation} className="w-full bg-slate-100 text-slate-900 py-4 rounded-2xl font-black uppercase text-sm tracking-wider">
+              {location ? "✅ Location Locked" : "📍 1. Fetch My Location"}
+            </button>
+            
+            <button 
+              onClick={submitSOS} 
+              disabled={!location || !selectedType} 
+              className="w-full bg-red-600 py-5 rounded-2xl font-black text-xl shadow-lg disabled:opacity-20"
+            >
+              2. SUBMIT SOS
+            </button>
+          </div>
+          <button onClick={() => setScreen('home')} className="w-full text-slate-500 mt-6 text-sm">Cancel Request</button>
+        </div>
+      )}
+
+      {/* 3. VISUAL MAP SCREEN */}
+      {screen === 'map' && (
+        <div className="max-w-md mx-auto pt-4">
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-xl font-black text-red-500 uppercase">Rescue Map</h2>
+            <div className="bg-green-500/20 text-green-500 px-3 py-1 rounded-full text-[10px] font-bold animate-pulse">LIVE TRACKING</div>
           </div>
 
-          <button onClick={getLocation} className="w-full bg-slate-800 border-2 border-cyan-600 py-4 rounded-xl font-bold">
-            {location ? "📍 Location Secured" : "Fetch My GPS Location 📍"}
-          </button>
+          {/* Visual Map Representation */}
+          <div className="relative w-full h-80 bg-slate-800 rounded-[2rem] border-2 border-slate-700 overflow-hidden mb-6 shadow-inner">
+             {/* Grid lines for map look */}
+             <div className="absolute inset-0 opacity-10" style={{backgroundImage: 'linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)', backgroundSize: '30px 30px'}}></div>
+             
+             {/* Victim Marker */}
+             <div className="absolute top-1/2 left-1/4 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center">
+                <div className="w-4 h-4 bg-red-500 rounded-full shadow-[0_0_15px_red] mb-1"></div>
+                <span className="text-[10px] font-bold bg-slate-900 px-2 py-0.5 rounded">YOU</span>
+             </div>
 
-          <button onClick={sendEmergency} className="w-full bg-red-600 py-5 rounded-xl font-black text-xl shadow-lg uppercase">
-            Submit SOS
-          </button>
-        </div>
-      </div>
-    );
-  }
+             {/* Volunteer Marker */}
+             <div className="absolute top-1/3 left-2/3 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center">
+                <div className="w-4 h-4 bg-cyan-400 rounded-full shadow-[0_0_15px_#22d3ee] mb-1 animate-bounce"></div>
+                <span className="text-[10px] font-bold bg-slate-900 px-2 py-0.5 rounded">RESCUER</span>
+             </div>
 
-  if (screen === 'map') {
-    const latestRequest = requests[0] || { latitude: 26.8467, longitude: 80.9462 };
+             {/* Connection Line */}
+             <div className="absolute top-[42%] left-[30%] w-[35%] h-[2px] bg-dashed border-t-2 border-dashed border-slate-500 rotate-[-15deg]"></div>
+          </div>
 
-    return (
-      <div className="min-h-screen bg-slate-900 text-white p-4 flex flex-col">
-        <button onClick={() => setScreen('welcome')} className="text-cyan-400 mb-4 flex items-center">← Back</button>
-        <h2 className="text-2xl font-bold mb-4">Nearby Alerts</h2>
-
-        <div className="w-full h-64 bg-slate-800 rounded-3xl mb-6 overflow-hidden border-2 border-slate-700 relative">
-          <iframe
-          title="Emergency Location Map" 
-          width="100%"
-          height="100%"
-          style={{ border: 0 }}
-          src={`https://maps.google.com/maps?q=${latestRequest.latitude},${latestRequest.longitude}&z=15&output=embed`}
-          ></iframe>
-          <div className="absolute top-2 right-2 bg-red-600 px-2 py-1 rounded text-[10px] animate-pulse">LIVE TRACKING</div>
-        </div>
-
-        <div className="space-y-4 overflow-y-auto max-h-[300px]">
-          {requests.map((req) => (
-            <div key={req.id} className="bg-slate-800 p-4 rounded-xl border-l-4 border-red-500">
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-red-400 font-bold text-xs">🚨 {req.type}</span>
-                <span className="text-[10px] text-gray-500">{req.time}</span>
-              </div>
-              <p className="text-sm">Status: <span className="text-cyan-400 font-bold">{req.status}</span></p>
-              <p className="text-[10px] text-slate-400 mt-1">📍 {req.latitude}, {req.longitude}</p>
+          <div className="bg-slate-800/50 p-6 rounded-2xl border border-slate-700 mb-6">
+            <div className="flex justify-between items-center text-sm mb-4">
+               <span className="text-slate-400 italic">Estimated Arrival</span>
+               <span className="text-white font-bold">~ 8 Minutes</span>
             </div>
-          ))}
+            <div className="h-1 bg-slate-700 rounded-full">
+               <div className="bg-red-500 h-full w-2/3"></div>
+            </div>
+          </div>
+
+          <button onClick={() => setScreen('home')} className="w-full bg-slate-800 py-4 rounded-xl text-sm font-bold border border-slate-700">Exit Tracking</button>
         </div>
-      </div>
-    );
-  }
+      )}
+
+      {/* 4. VOLUNTEER DASHBOARD (From Snapshot) */}
+      {screen === 'dashboard' && (
+        <div className="pt-4">
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-2xl font-black">ACTIVE ALERTS</h2>
+            <button onClick={() => setScreen('home')} className="text-slate-500 text-xs uppercase">Close</button>
+          </div>
+          <div className="space-y-4">
+            {requests.map(req => (
+              <div key={req.id} className="bg-slate-800 p-5 rounded-2xl border-l-4 border-red-600">
+                <div className="flex justify-between mb-2">
+                  <span className="font-black text-red-500 uppercase text-xs tracking-widest">{req.type}</span>
+                  <span className="text-[10px] text-slate-500">{req.time}</span>
+                </div>
+                <p className="text-[10px] text-slate-400 mb-3">Coords: {req.latitude.toFixed(3)}, {req.longitude.toFixed(3)}</p>
+                <button className="w-full bg-cyan-500/10 text-cyan-400 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest">Mark as Rescued</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default App;
